@@ -1,0 +1,77 @@
+-- Logs begin at Tue 2015-08-25 11:42:43 MDT, end at Fri 2015-11-20 16:18:35 MST. --
+Nov 07 11:45:11 localhost systemd-coredump[13913]: Process 13912 (micropython) of user 1000 dumped core.
+-- Subject: Process 13912 (micropython) dumped core
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+-- Documentation: man:core(5)
+-- 
+-- Process 13912 (micropython) crashed and dumped core.
+-- 
+-- This usually indicates a programming error in the crashing program and
+-- should be reported to its vendor as a bug.
+Nov 07 11:45:11 localhost systemd-coredump[13916]: Process 13915 (micropython) of user 1000 dumped core.
+-- Subject: Process 13915 (micropython) dumped core
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+-- Documentation: man:core(5)
+-- 
+-- Process 13915 (micropython) crashed and dumped core.
+-- 
+-- This usually indicates a programming error in the crashing program and
+-- should be reported to its vendor as a bug.
+Nov 07 19:01:21 localhost systemd-coredump[24564]: Process 24563 (ar) of user 1000 dumped core.
+-- Subject: Process 24563 (ar) dumped core
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+-- Documentation: man:core(5)
+-- 
+-- Process 24563 (ar) crashed and dumped core.
+-- 
+-- This usually indicates a programming error in the crashing program and
+-- should be reported to its vendor as a bug.
+Nov 08 14:05:39 localhost systemd-coredump[6629]: Process 5833 (vim) of user 1000 dumped core.
+-- Subject: Process 5833 (vim) dumped core
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+-- Documentation: man:core(5)
+-- 
+-- Process 5833 (vim) crashed and dumped core.
+-- 
+-- This usually indicates a programming error in the crashing program and
+-- should be reported to its vendor as a bug.
+Nov 08 14:05:39 localhost systemd-coredump[6633]: Process 21698 (vim) of user 1000 dumped core.
+-- Subject: Process 21698 (vim) dumped core
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+-- Documentation: man:core(5)
+-- 
+-- Process 21698 (vim) crashed and dumped core.
+-- 
+-- This usually indicates a programming error in the crashing program and
+-- should be reported to its vendor as a bug.
+Nov 08 14:05:41 localhost kernel: watchdog watchdog0: watchdog did not stop!
+-- Reboot --
+Nov 09 11:10:22 localhost systemd-coredump[16023]: Process 10722 (vim) of user 1000 dumped core.
+-- Subject: Process 10722 (vim) dumped core
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+-- Documentation: man:core(5)
+-- 
+-- Process 10722 (vim) crashed and dumped core.
+-- 
+-- This usually indicates a programming error in the crashing program and
+-- should be reported to its vendor as a bug.
+Nov 09 11:10:23 localhost kernel: watchdog watchdog0: watchdog did not stop!
+-- Reboot --
+Nov 09 13:34:09 localhost kernel: watchdog watchdog0: watchdog did not stop!
+-- Reboot --
+Nov 10 09:57:31 localhost systemd-coredump[4439]: Process 3401 (vim) of user 1000 dumped core.
+-- Subject: Process 3401 (vim) dumped core
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+-- Documentation: man:core(5)
+-- 
+-- Process 3401 (vim) crashed and dumped core.
+-- 
+-- This usually indicates a programming error in the crashing program and
+-- should be reported to its vendor as a bug.

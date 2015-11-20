@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import os
+import glob
 from contextlib import contextmanager
 import unittest
 import mock
@@ -12,10 +13,10 @@ ex = pjoin(__path__, 'examples')
 
 
 @contextmanager
-def mock_dg(obj, result_path):
+def mock_dg(obj, result_path, name='mocked'):
     def _call_subprocess():
         with open(result_path) as f:
-            return [('mocked', f.read())]
+            return [(name, f.read())]
     original = obj._call_subprocess
     try:
         obj._call_subprocess = _call_subprocess
@@ -30,26 +31,36 @@ class SimpleTest(object):
 
     def __call__(self):
         key = self.key
-        obj = dg.system_calls[key]
-        with mock_dg(obj, pjoin(ex, '{}.pass'.format(key))):
-            result = obj()
-            assert not result
+        obj = dg.system_diagnostics[key]
+        for test_file in glob.glob(pjoin(ex, key) + '.pass*'):
+            print('.', end='')
+            with mock_dg(obj, test_file, key):
+                result = obj()
+                assert not result
 
-        with mock_dg(obj, pjoin(ex, '{}.fail'.format(key))):
-            result = obj()
-            assert result
+        for test_file in glob.glob(pjoin(ex, key) + '.fail*'):
+            print('.', end='')
+            with mock_dg(obj, test_file, key):
+                result = obj()
+                assert result
 
 
 tests = [
+    SimpleTest('dmesg'),
+    SimpleTest('systemctl'),
+    SimpleTest('journalctl'),
     SimpleTest('hdparm'),
+    SimpleTest('df'),
+    SimpleTest('df_inode'),
     SimpleTest('iplink'),
+    SimpleTest('internet'),
 ]
 
 
 def test_do():
     print("Running tests:")
     for test in tests:
-        print("Testing {:30}".format(test.key + '...'), end=' ')
+        print("Testing {}  ".format(test.key), end='')
         try:
             test()
         except:
