@@ -260,51 +260,53 @@ def process_temperatures(stdout):
 
 drive_devices = "ls /dev/sd* | grep -P '^/dev/sd[a-z]+$'"
 
-system_diagnostics = OrderedDict(
+system_diagnostics = OrderedDict((
     # System Journals
-    dmesg=Diagnose('dmesg', msg='no concerning error logs detected',
-                   fail_pats=[r'UncorrectableError',  # drive has uncorrectable error
-                              r'Remounting filesystem read-only',
-                              r'hung_task_timeout_secs',               # kernel task hung
-                              r'BUG: soft lockup',                     # kernel soft lockup
-                              r'nfs: server [^\n]* not responding',    # NFS timeout
-                              r'invoked oom-killer']),                 # Out of Memory
-    journalctl=Diagnose('journalctl -p 0..3 -xn --since "-240"', skip=Skip('which journalctl'),
-                        success_pats=[r'^-- No entries --$'], requires='systemd',
-                        msg='No emergency->error journals in the last 10 days'),
+    ('dmesg',
+        Diagnose('dmesg', msg='no concerning error logs detected',
+                 fail_pats=[r'UncorrectableError',  # drive has uncorrectable error
+                            r'Remounting filesystem read-only',
+                            r'hung_task_timeout_secs',               # kernel task hung
+                            r'BUG: soft lockup',                     # kernel soft lockup
+                            r'nfs: server [^\n]* not responding',    # NFS timeout
+                            r'invoked oom-killer'])),                # Out of Memory
+    ('journalctl', Diagnose('journalctl -p 0..3 -xn --since "-240"', skip=Skip('which journalctl'),
+                            success_pats=[r'^-- No entries --$'], requires='systemd',
+                            msg='No emergency->error journals')),
 
     # Services + System
-    systemctl=Diagnose('systemctl --failed', skip=Skip('which systemctl'),
-                       fail_pats=[r'\sfailed\s'], msg='no failed services'),
-    file_desc=Diagnose('lsof | wc -l && sysctl fs.file-max', skip=Skip('which lsof'),
-                       process=process_current_max, requires='lsof',
-                       msg='file descriptors < 95% usage'),
-    threads=Diagnose("ps -eo nlwp | tail -n +2 | awk '{ num_threads += $1 }"
-                     " END { print num_threads }' && ulimit -u",
-                     process=process_current_max, msg='threads < 95% usage'),
+    ('systemctl', Diagnose('systemctl --failed', skip=Skip('which systemctl'),
+                           fail_pats=[r'\sfailed\s'], msg='no failed services')),
+    ('file_desc', Diagnose('lsof | wc -l && sysctl fs.file-max', skip=Skip('which lsof'),
+                           process=process_current_max, requires='lsof',
+                           msg='file descriptors < 95% usage')),
+    ('threads', Diagnose("ps -eo nlwp | tail -n +2 | awk '{ num_threads += $1 }"
+                         " END { print num_threads }' && ulimit -u",
+                         process=process_current_max, msg='threads < 95% usage')),
 
     # HDD / disk
-    hdparm=Diagnose('hdparm -I {device}', devices=drive_devices,
-                     fail_pats=[r'Security:.*((?<!not)\slocked)',
-                                r'Security:.*((?<!not)\sfrozen)',
-                                r'(Checksum: (?!correct))'],
-                     msg='hardrives unlocked'),
-    df=Diagnose('df', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='disk usage < 95%'),
-    df_inode=Diagnose('df -i', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='inodes < 95%'),
-    smart=Diagnose('smartctl -A {device}', devices=drive_devices, process=process_SMART_hdd,
-                   skip=Skip('which smartctl'), requires='smartmontools',
-                   msg='drives in usable health'),
+    ('hdparm',
+        Diagnose('hdparm -I {device}', devices=drive_devices,
+                 fail_pats=[r'Security:.*((?<!not)\slocked)',
+                            r'Security:.*((?<!not)\sfrozen)',
+                            r'(Checksum: (?!correct))'],
+                 msg='hardrives unlocked')),
+    ('df', Diagnose('df', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='disk usage < 95%')),
+    ('df_inode', Diagnose('df -i', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='inodes < 95%')),
+    ('smart', Diagnose('smartctl -A {device}', devices=drive_devices, process=process_SMART_hdd,
+                      skip=Skip('which smartctl'), requires='smartmontools',
+                      msg='drives in usable health')),
 
     # Network
-    iplink=Diagnose('ip link', fail_pats=['^\d+:.*state DOWN.*$'], msg='links up'),
-    internet=Diagnose('ping -c 1 8.8.8.8', fail_pats=[r'0 received, 100% packet loss'],
-                      msg='connected to google DNS'),
+    ('iplink', Diagnose('ip link', fail_pats=['^\d+:.*state DOWN.*$'], msg='links up')),
+    ('internet', Diagnose('ping -c 1 8.8.8.8', fail_pats=[r'0 received, 100% packet loss'],
+                          msg='connected to google DNS')),
 
     # Misc Hardware
-    memory=Diagnose('free -m', process=process_free_mem, msg='mem < 90%, swap < 25%'),
-    sensors=Diagnose('sensors', process=process_temperatures, requires='lm_sensors',
-                     skip=Skip('which sensors-detect'), msg='temps look adequate'),
-)
+    ('memory', Diagnose('free -m', process=process_free_mem, msg='mem < 90%, swap < 25%')),
+    ('sensors', Diagnose('sensors', process=process_temperatures, requires='lm_sensors',
+                        skip=Skip('which sensors-detect'), msg='temps look adequate')),
+))
 
 
 def main():
