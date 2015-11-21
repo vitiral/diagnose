@@ -15,7 +15,7 @@ ex = pjoin(__path__, 'examples')
 @contextmanager
 def mock_dg(obj, result_path, name='mocked'):
     def _call_subprocess():
-        with open(result_path) as f:
+        with open(result_path, 'rb') as f:
             return [(name, f.read())]
     original = obj._call_subprocess
     try:

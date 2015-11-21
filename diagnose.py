@@ -1,6 +1,9 @@
 import re
 import subprocess
 
+__version__ = '0.0.1'
+
+
 
 def match_pats(pats, text):
     matches = (pat.search(text) for pat in pats)
@@ -23,20 +26,21 @@ class Skip(object):
         '''
         :str cmd: command to call
         :func process: process function that returns True for skipping.
-            If left None, item is skipped if cmd returns any value
+            If left None, item is skipped if cmd returns a string of
+            the form r'^/.*/cmd$'
         '''
         self.cmd = cmd
-        self.process = process
+
+        def default_process(text):
+            return not re.search(r'^/.*{}$'.format(cmd.split()[1]), text.decode())
+        self.process = process or default_process
 
     def __call__(self):
         output = self._call_subprocess().strip()
-        if self.process:
-            return self.process(output)
-        else:
-            return bool(output)  # typical use case is just 'which cmd'
+        return self.process(output)
 
     def _call_subprocess(self):
-        return subprocess.check_output(self.cmd)
+        return subprocess.check_output(self.cmd, shell=True)
 
 
 class Diagnose(object):
@@ -60,6 +64,7 @@ class Diagnose(object):
         def format_pat(pat):
             if '(' not in pat and ')' not in pat:
                 pat = '(' + pat + ')'
+            pat = pat.encode()
             return pat
 
         if fail_pats:
@@ -91,9 +96,9 @@ class Diagnose(object):
 
     def _call_subprocess(self):
         if self.devices:
-            devices = subprocess.check_output(self.devices, shell=True).split('\n')
+            devices = subprocess.check_output(self.devices, shell=True).split(b'\n')
             devices = (d.strip() for d in devices)
-            devices = [d for d in devices if d]
+            devices = [d.decode() for d in devices if d]
             commands = [self.cmd.format(device=d) for d in devices]
         else:
             commands = [self.cmd]
@@ -105,16 +110,17 @@ class Diagnose(object):
 
 
 def process_free_mem(stdout):
+    stdout = stdout.decode()
     failures = []
     stdout = [l.strip() for l in stdout.split('\n') if l.strip()]
     header, mem = stdout[:2]
     header = [h.lower() for h in header.split()[:2]]
-    mem = dict(zip(header, mem.split()[1:3]))
+    mem = {k: float(v) for (k, v) in zip(header, mem.split()[1:3])}
     if mem['used'] * 1.0 / mem['total'] > 0.90:
         failures.append('mem usage > 90%')
     if len(stdout) > 2:  # swap exists
         swap = stdout[2]
-        swap = dict(zip(header, swap.split()[1:3]))
+        swap = {k: float(v) for (k, v) in zip(header, swap.split()[1:3])}
         if swap['total'] and swap['used'] * 1.0 / swap['total'] > 0.25:
             failures.append('swap usage > 25%')
     return failures
@@ -141,12 +147,12 @@ system_diagnostics = {
     'internet': Diagnose('ping -c 1 8.8.8.8', fail_pats=[r'0 received, 100% packet loss']),
     'systemctl': Diagnose('systemctl --failed', skip=Skip('which systemctl'),
                           fail_pats=[r'\sfailed\s']),
-    'journalctl': Diagnose('journalctl -p 0..2 -xn', skip=Skip('which journalctl'),
+    'journalctl': Diagnose('journalctl -p 0 -xn', skip=Skip('which journalctl'),
                            success_pats=[r'^-- No entries --$'])
 }
 
 
-if __name__ == '__main__':
+def main():
     for name, diagnose in system_diagnostics.items():
         if diagnose.skip:
             print("SKIP {}".format(name))
@@ -156,3 +162,6 @@ if __name__ == '__main__':
             print("FAIL {}: {}".format(name, failed))
         else:
             print("PASS {}".format(name))
+
+if __name__ == '__main__':
+    main()
