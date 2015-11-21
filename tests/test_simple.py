@@ -51,6 +51,8 @@ tests = [
     SimpleTest('journalctl'),
     # services
     SimpleTest('systemctl'),
+    SimpleTest('file_desc'),
+    SimpleTest('threads'),
     # hdd / disk
     SimpleTest('hdparm'),
     SimpleTest('df'),
