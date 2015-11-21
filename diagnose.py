@@ -4,10 +4,54 @@ import subprocess
 __version__ = '0.0.1'
 
 
+##################################################
+# General Utility Functions
 
 def match_pats(pats, text):
     matches = (pat.search(text) for pat in pats)
     return [m.groups() for m in matches if m is not None]
+
+
+def convert_value(value):
+    try:
+        value = float(value)
+    except ValueError:
+        return value
+    else:
+        if int(value) == value:
+            return int(value)
+        return value
+
+
+def get_info(infodict, line):
+    out = {}
+    for key, pat in infodict.items():
+        match = re.search(pat, line)
+        if match:
+            out[key] = convert_value(match.group(1))
+    return out
+
+
+def get_table(header, lines, separator=None):
+    return [{k: convert_value(v) for (k, v) in zip(header, l.split(separator))}
+            for l in lines if l]
+
+
+##################################################
+# Classes
+
+class Valid(object):
+    def __init__(self, min=None, max=None, equal=None, isin=None):
+        self.min, self.max, self.equal, self.isin = min, max, equal, isin
+
+    def __call__(self, value):
+        notnone = lambda v: v is not None
+        if ((notnone(self.min) and value < self.min)
+                or (notnone(self.max) and value > self.max)
+                or (notnone(self.equal) and value != self.equal)
+                or (notnone(self.isin) and self.isin not in value)):
+            return False
+        return True
 
 
 class Failure(object):
@@ -109,31 +153,70 @@ class Diagnose(object):
         return self._skip() if self._skip else False
 
 
+##################################################
+# Special parsing functions
+
+def process_SMART_hdd(stdout):
+    lines = stdout.decode().split('\n')
+    failures = []
+    name, value, raw = 'ATTRIBUTE_NAME', 'VALUE', 'RAW_VALUE'
+    expected = {
+        'Media_Wearout_Indicator': {value: Valid(min=10)},
+        'Current_Pending_Sector': {raw: Valid(max=20)},
+    }
+    header_line = next(i for (i, l) in enumerate(lines) if 'ID#' in l)
+    table = get_table(lines[header_line].split(), lines[header_line + 1:])
+    table = [r for r in table if r[name] in expected]
+    for row in table:
+        for value_name, valid in expected[row[name]].items():
+            if not valid(row[value_name]):
+                failures.append('{} {}'.format(row[name], row[value_name]))
+    return failures
+
+
 def process_free_mem(stdout):
     stdout = stdout.decode()
     failures = []
     stdout = [l.strip() for l in stdout.split('\n') if l.strip()]
-    header, mem = stdout[:2]
-    header = [h.lower() for h in header.split()[:2]]
-    mem = {k: float(v) for (k, v) in zip(header, mem.split()[1:3])}
+    header = [h.lower() for h in ['type'] + stdout[0].split()[:3]]
+    mem = get_table(header, [stdout[1]])[0]
     if mem['used'] * 1.0 / mem['total'] > 0.90:
         failures.append('mem usage > 90%')
     if len(stdout) > 2:  # swap exists
-        swap = stdout[2]
-        swap = {k: float(v) for (k, v) in zip(header, swap.split()[1:3])}
+        swap = get_table(header, [stdout[2]])[0]
         if swap['total'] and swap['used'] * 1.0 / swap['total'] > 0.25:
             failures.append('swap usage > 25%')
     return failures
 
 
+def process_temperatures(stdout):
+    stdout = stdout.decode().split('\n')
+    failures = []
+    infodict = {'temp': r'^[^:+\n]*:.*?([\d.]+)',
+                'high': r'\(.*high\s*=\s*\+?([\d.]+)',
+                'crit': r'\(.*crit\s*=\s*\+?([\d.]+)'}
+    for line in stdout:
+        linfo = get_info(infodict, line)
+        if not linfo:
+            continue
+        temp = linfo.get('temp')
+        if not temp:
+            continue
+        high = list(filter(None, (linfo.get('high'), linfo.get('crit'))))
+        high = min(high) if high else 105
+        if temp > high:
+            failures.append(line)
+    return failures
+
+
+##################################################
+# System Diagnostics definitions
+
+drive_devices = "ls /dev/sd* | grep -P '^/dev/sd[a-z]+$'"
+
 system_diagnostics = {
-    'hdparm':
-        Diagnose('hdparm -I {device}', devices="ls /dev/sd* | grep -P '^/dev/sd[a-z]+$'",
-                 fail_pats=[r'Security:.*((?<!not)\slocked)',
-                            r'Security:.*((?<!not)\sfrozen)',
-                            r'(Checksum: (?!correct))']),
-     'iplink': Diagnose('ip link', fail_pats=['^\d+:.*state DOWN.*$']),
-     'dmesg':
+    # System Journals
+    'dmesg':
         Diagnose('dmesg',
                  fail_pats=[r'UncorrectableError',  # drive has uncorrectable error
                             r'Remounting filesystem read-only',
@@ -141,14 +224,30 @@ system_diagnostics = {
                             r'BUG: soft lockup',                     # kernel soft lockup
                             r'nfs: server [^\n]* not responding',    # NFS timeout
                             r'invoked oom-killer']),                 # Out of Memory
-    'df': Diagnose('df', fail_pats=[r'((?:9[5-9]|100)%.*$)']),              # disk usage
-    'df_inode': Diagnose('df -i', fail_pats=[r'((?:9[5-9]|100)%.*$)']),     # inode usage
-    'memory': Diagnose('free -m', process=process_free_mem),
-    'internet': Diagnose('ping -c 1 8.8.8.8', fail_pats=[r'0 received, 100% packet loss']),
+    'journalctl': Diagnose('journalctl -p 0 -xn', skip=Skip('which journalctl'),
+                           success_pats=[r'^-- No entries --$']),
+
+    # Services
     'systemctl': Diagnose('systemctl --failed', skip=Skip('which systemctl'),
                           fail_pats=[r'\sfailed\s']),
-    'journalctl': Diagnose('journalctl -p 0 -xn', skip=Skip('which journalctl'),
-                           success_pats=[r'^-- No entries --$'])
+
+    # HDD / disk
+    'hdparm':
+        Diagnose('hdparm -I {device}', devices=drive_devices,
+                 fail_pats=[r'Security:.*((?<!not)\slocked)',
+                            r'Security:.*((?<!not)\sfrozen)',
+                            r'(Checksum: (?!correct))']),
+    'df': Diagnose('df', fail_pats=[r'((?:9[5-9]|100)%.*$)']),              # disk usage
+    'df_inode': Diagnose('df -i', fail_pats=[r'((?:9[5-9]|100)%.*$)']),     # inode usage
+    'smart': Diagnose('smartctl -A {device}', devices=drive_devices, process=process_SMART_hdd),
+
+    # Network
+    'iplink': Diagnose('ip link', fail_pats=['^\d+:.*state DOWN.*$']),
+    'internet': Diagnose('ping -c 1 8.8.8.8', fail_pats=[r'0 received, 100% packet loss']),
+
+    # Misc Hardware
+    'memory': Diagnose('free -m', process=process_free_mem),
+    'sensors': Diagnose('sensors', process=process_temperatures),
 }
 
 
@@ -162,6 +261,7 @@ def main():
             print("FAIL {}: {}".format(name, failed))
         else:
             print("PASS {}".format(name))
+
 
 if __name__ == '__main__':
     main()

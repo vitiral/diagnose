@@ -46,14 +46,22 @@ class SimpleTest(object):
 
 
 tests = [
+    # system logs
     SimpleTest('dmesg'),
-    SimpleTest('systemctl'),
     SimpleTest('journalctl'),
+    # services
+    SimpleTest('systemctl'),
+    # hdd / disk
     SimpleTest('hdparm'),
     SimpleTest('df'),
     SimpleTest('df_inode'),
+    SimpleTest('smart'),
+    # network
     SimpleTest('iplink'),
     SimpleTest('internet'),
+    # misc hardware
+    SimpleTest('memory'),
+    SimpleTest('sensors'),
 ]
 
 

@@ -1,0 +1,31 @@
+smartctl 6.4 2015-06-04 r4109 [x86_64-linux-4.1.6-1-ARCH] (local build)
+Copyright (C) 2002-15, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF READ SMART DATA SECTION ===
+SMART Attributes Data Structure revision number: 4
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+  5 Reallocated_Sector_Ct   0x0032   100   100   ---    Old_age   Always       -       0
+  9 Power_On_Hours          0x0032   253   100   ---    Old_age   Always       -       424
+ 12 Power_Cycle_Count       0x0032   100   100   ---    Old_age   Always       -       615
+166 Unknown_Attribute       0x0032   100   100   ---    Old_age   Always       -       1
+167 Unknown_Attribute       0x0032   100   100   ---    Old_age   Always       -       35
+168 Unknown_Attribute       0x0032   100   100   ---    Old_age   Always       -       25
+169 Unknown_Attribute       0x0032   100   100   ---    Old_age   Always       -       552
+171 Unknown_Attribute       0x0032   100   100   ---    Old_age   Always       -       0
+172 Unknown_Attribute       0x0032   100   100   ---    Old_age   Always       -       0
+173 Unknown_Attribute       0x0032   100   100   ---    Old_age   Always       -       1
+174 Unknown_Attribute       0x0032   100   100   ---    Old_age   Always       -       3
+184 End-to-End_Error        0x0032   100   100   ---    Old_age   Always       -       0
+187 Reported_Uncorrect      0x0032   100   100   ---    Old_age   Always       -       0
+188 Command_Timeout         0x0032   100   100   ---    Old_age   Always       -       0
+194 Temperature_Celsius     0x0022   060   054   ---    Old_age   Always       -       40 (Min/Max 17/54)
+199 UDMA_CRC_Error_Count    0x0032   100   100   ---    Old_age   Always       -       0
+212 Unknown_Attribute       0x0032   100   100   ---    Old_age   Always       -       0
+230 Unknown_SSD_Attribute   0x0032   100   100   ---    Old_age   Always       -       3
+232 Available_Reservd_Space 0x0033   100   100   004    Pre-fail  Always       -       100
+233 Media_Wearout_Indicator 0x0032     5   100   ---    Old_age   Always       -       529
+241 Total_LBAs_Written      0x0030   253   253   ---    Old_age   Offline      -       286
+242 Total_LBAs_Read         0x0030   253   253   ---    Old_age   Offline      -       124
+244 Unknown_Attribute       0x0032   000   100   ---    Old_age   Always       -       0
+
