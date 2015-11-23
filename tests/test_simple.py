@@ -54,6 +54,7 @@ tests = [
     SimpleTest('file_desc'),
     SimpleTest('threads'),
     # hdd / disk
+    SimpleTest('readonly'),
     SimpleTest('hdparm'),
     SimpleTest('df'),
     SimpleTest('df_inode'),

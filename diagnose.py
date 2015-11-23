@@ -285,6 +285,7 @@ system_diagnostics = OrderedDict((
                          process=process_current_max, msg='threads < 95% usage')),
 
     # HDD / disk
+    ('readonly', Diagnose('ls -ld /', success_pats=[r'^drwx'], msg='/ is read+write+exec by root')),
     ('hdparm',
         Diagnose('hdparm -I {device}', devices=drive_devices,
                  fail_pats=[r'Security:.*((?<!not)\slocked)',
@@ -298,7 +299,7 @@ system_diagnostics = OrderedDict((
                       msg='drives in usable health')),
 
     # Network
-    ('iplink', Diagnose('ip link', fail_pats=['^\d+:.*state DOWN.*$'], msg='links up')),
+    ('iplink', Diagnose('ip link', fail_pats=['^\d+:.*state DOWN.*$'], msg='network links up')),
     ('internet', Diagnose('ping -c 1 8.8.8.8', fail_pats=[r'0 received, 100% packet loss'],
                           msg='connected to google DNS')),
 
