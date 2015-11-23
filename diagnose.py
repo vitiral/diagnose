@@ -47,6 +47,16 @@ except ImportError:
             except:
                 raise KeyError(key)
 
+
+def call_cmd(cmd, raise_on_error=True):
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = p.communicate()
+    rc = p.returncode
+    if rc and raise_on_error:
+        raise RuntimeError("Command [{0}] got rc {1}: stdout={2}\nstderr={3}".format(
+                           cmd, rc, stdout, stderr))
+    return stdout, stderr, rc
+
 __version__ = '0.0.1'
 
 logging.basicConfig(level=logging.DEBUG)
@@ -170,15 +180,17 @@ class Skip(object):
         self.cmd = cmd
 
         def default_process(text):
-            return not re.search(r'^/[/\w]+/{0}$'.format(cmd.split()[0]), decode(text))
+            return not re.search(r'^/[/\w]+/{0}$'.format(cmd.split()[1]), decode(text))
         self.process = process or default_process
 
     def __call__(self):
-        output = self._call_subprocess().strip()
-        return self.process(output)
+        out, _, rc = self._call_subprocess()
+        if rc:
+            return True
+        return self.process(out.strip())
 
     def _call_subprocess(self):
-        return subprocess.check_output(self.cmd, shell=True)
+        return call_cmd(self.cmd, raise_on_error=False)
 
 
 class Diagnose(object):
@@ -250,8 +262,8 @@ class Diagnose(object):
     def _get_commands(self):
         if self.devices:
             if isinstance(self.devices, str):
-                devices = subprocess.check_output(self.devices, shell=True).split(b'\n')
-                devices = (d.strip() for d in devices)
+                devices, _, _ = call_cmd(self.devices)
+                devices = (d.strip() for d in devices.split(b'\n'))
                 devices = [decode(d) for d in devices if d]
             else:
                 devices = self.devices
@@ -260,7 +272,7 @@ class Diagnose(object):
             return [self.cmd]
 
     def _call_subprocesses(self):
-        return [(cmd, subprocess.check_output(cmd, shell=True)) for cmd in self._get_commands()]
+        return [(cmd, call_cmd(cmd)[0]) for cmd in self._get_commands()]
 
     @property
     def skip(self):

@@ -2,7 +2,7 @@ See `diagnose.py` for documentation
 
 # Intended usage
 ```
-curl -L https://raw.githubusercontent.com/vitiral/diagnose/master/diagnose.py > diagnose
+curl -L https://raw.githubusercontent.com/vitiral/diagnose/master/diagnose.py > diagnose && chmod 700 diagnose
 sudo ./diagnose
 ```
 

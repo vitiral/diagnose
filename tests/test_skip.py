@@ -28,14 +28,14 @@ class SkipTest(object):
             assert s() == self.willskip
 
 
-journalctl_stdout = (
+journalctl_stderr = (
     b'/usr/bin/which: no journalctl in (/usr/lib64/qt-3.3/bin:/usr/local/sbin:/usr/local/bin'
     b':/sbin:/bin:/usr/sbin:/usr/bin:/root/bin)')
 
 tests = [
-    SkipTest(False, 'systemctl', b'/usr/bin/systemctl'),
-    SkipTest(True, 'systemctl', b'systemctl not found'),
-    SkipTest(True, 'journalctl', journalctl_stdout),
+    SkipTest(False, 'which systemctl', (b'/usr/bin/systemctl', None, 0)),
+    SkipTest(True, 'which systemctl', (b'systemctl not found', None, 0)),
+    SkipTest(True, 'which journalctl', (b'', journalctl_stderr, 1)),
 ]
 
 
