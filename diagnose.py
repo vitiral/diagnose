@@ -20,9 +20,11 @@ test and extend. If you have new features or find any bugs, please visit:
 
 from __future__ import print_function
 
+import sys
 import re
 import subprocess
 from collections import OrderedDict
+import threading
 
 __version__ = '0.0.1'
 
@@ -66,6 +68,39 @@ def get_table(header, lines, separator=None):
 
 ##################################################
 # Classes
+
+class Thread(threading.Thread):
+    def __init__(self, *args, **kwargs):
+        super(Thread, self).__init__(*args, **kwargs)
+        self.output = None
+        self.exc_info = None
+        if not hasattr(self, '_target'):  # python2/3 compatibility
+            self._target = self._Thread__target
+            self._args = self._Thread__args
+            self._kwargs = self._Thread__kwargs
+
+    def run(self, *args, **kwargs):
+        try:
+            self.output = self._target(*self._args, **self._kwargs)
+        except Exception:
+            self.exc_info = sys.exc_info()
+
+    def join(self, *args, **kwargs):
+        super(Thread, self).join(*args, **kwargs)
+        if self.exc_info:
+            if sys.version_info[0] == 3:
+                raise self.exc_info[0]
+            else:
+                exec('e=self.exc_info; raise e[0], e[1], e[2]')
+        return self.output
+
+    @classmethod
+    def spawn(cls, target, *args, **kwargs):
+        t = cls(target=target, args=args, kwargs=kwargs)
+        t.daemon = kwargs.get('daemon', True)
+        t.start()
+        return t
+
 
 class Valid(object):
     '''Useful for testing validity in a table'''
@@ -310,19 +345,33 @@ system_diagnostics = OrderedDict((
 ))
 
 
-def main():
-    for name, diagnose in system_diagnostics.items():
+##################################################
+# Main functions
+
+def start_parallel_diagnostics(diagnostics):
+    threads = []
+    for name, diagnose in diagnostics.items():
         if diagnose.skip:
             requires = ': requires ' + diagnose.requires if diagnose.requires else ''
             print("SKIP {}{}".format(name, requires))
             continue
-        failed = diagnose()
+        threads.append(Thread.spawn(diagnose))
+    return threads
+
+
+def print_results(diagnostics, results):
+    for name, diagnose, failed in zip(diagnostics, diagnostics.values(), results):
         if failed:
             print("FAIL {}: {}".format(name, failed))
         else:
             msg = ': ' + diagnose.msg if diagnose.msg else ''
             print("PASS {}{}".format(name, msg))
 
+
+def main():
+    # "fast" system diagnostics
+    results = [t.join() for t in start_parallel_diagnostics(system_diagnostics)]
+    print_results(system_diagnostics, results)
 
 if __name__ == '__main__':
     main()
