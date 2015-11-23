@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import glob
 import unittest
-import mock
 import diagnose as dg
 
 from .utils import pjoin, ex, mock_dg, run_tests

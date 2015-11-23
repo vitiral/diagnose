@@ -25,7 +25,7 @@ def mock_dg(obj, result_path, name='mocked'):
 def run_tests(tests):
     print("Running tests:")
     for test in tests:
-        print("Testing {}  ".format(test.key), end='')
+        print("Testing {0}  ".format(test.key), end='')
         try:
             test()
         except:

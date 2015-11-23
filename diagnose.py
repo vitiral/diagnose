@@ -25,9 +25,27 @@ import time
 import re
 import argparse
 import subprocess
-from collections import OrderedDict
 import threading
 import logging
+
+try:
+    from collections import OrderedDict
+except ImportError:
+    class OrderedDict(tuple):
+        '''A really terrible implementation of OrderedDict (for python < 2.7)'''
+        def __new__(cls, constructor):
+            items = tuple(constructor)
+            values = tuple(n[1] for n in items)
+            out = tuple.__new__(cls, (n[0] for n in items))
+            out.keys = lambda: out
+            out.items, out.values = lambda: items, lambda: values
+            return out
+
+        def __getitem__(self, key):
+            try:
+                return next(v for (k, v) in self.items() if k == key)
+            except:
+                raise KeyError(key)
 
 __version__ = '0.0.1'
 
@@ -73,7 +91,7 @@ def get_info(infodict, line):
 
 
 def get_table(header, lines, separator=None):
-    return [{k: convert_value(v) for (k, v) in zip(header, l.split(separator))}
+    return [dict((k, convert_value(v)) for (k, v) in zip(header, l.split(separator)))
             for l in lines if l]
 
 
@@ -135,8 +153,8 @@ class Failure(object):
         self.failures = failures
 
     def __repr__(self):
-        header = 'FAIL [{}]:\n'.format(self.cmd)
-        lines = [' :: {}'.format(l) for l in self.failures]
+        header = 'FAIL [{0}]:\n'.format(self.cmd)
+        lines = [' :: {0}'.format(l) for l in self.failures]
         return header + '\n'.join(lines)
 
 
@@ -151,7 +169,7 @@ class Skip(object):
         self.cmd = cmd
 
         def default_process(text):
-            return not re.search(r'^/.*{}$'.format(cmd.split()[1]), decode(text))
+            return not re.search(r'^/.*{0}$'.format(cmd.split()[1]), decode(text))
         self.process = process or default_process
 
     def __call__(self):
@@ -269,7 +287,7 @@ class DiagnoseLong(Diagnose):
                 time.sleep(self.loop_sleep)
             stdout, stderr = process.communicate()
             if stderr:
-                _log.debug("stderr from {}: {}".format(cmd, stderr))
+                _log.debug("stderr from {0}: {1}".format(cmd, stderr))
             failures.extend(self._find_failures(cmd, stdout))
             if failures:
                 return failures
@@ -304,7 +322,7 @@ def process_SMART_hdd(stdout):
     for row in table:
         for value_name, valid in expected[row[name]].items():
             if not valid(row[value_name]):
-                failures.append('{} {}'.format(row[name], row[value_name]))
+                failures.append('{0} {1}'.format(row[name], row[value_name]))
     return failures
 
 
@@ -433,7 +451,7 @@ def start_parallel_diagnostics(diagnostics):
     for name, diagnose in diagnostics.items():
         if diagnose.skip:
             requires = ': requires ' + diagnose.requires if diagnose.requires else ''
-            print("SKIP {}{}".format(name, requires))
+            print("SKIP {0}{1}".format(name, requires))
             continue
         threads.append(Thread.spawn(diagnose))
     return threads
@@ -444,7 +462,7 @@ def run_sequential_diagnostics(diagnostics):
     for name, diagnose in diagnostics.items():
         if diagnose.skip:
             requires = ': requires ' + diagnose.requires if diagnose.requires else ''
-            print("SKIP {}{}".format(name, requires))
+            print("SKIP {0}{1}".format(name, requires))
             continue
         results.append(diagnose())
     return results
@@ -453,20 +471,20 @@ def run_sequential_diagnostics(diagnostics):
 def print_results(diagnostics, results):
     for name, diagnose, failed in zip(diagnostics, diagnostics.values(), results):
         if failed:
-            print("FAIL {}: {}".format(name, failed))
+            print("FAIL {0}: {1}".format(name, failed))
         else:
             msg = ': ' + diagnose.msg if diagnose.msg else ''
-            print("PASS {}{}".format(name, msg))
+            print("PASS {0}{1}".format(name, msg))
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--short-names', nargs='+',
-                        help='list the short diagnostics you want to run. Choices are: {}'.
+                        help='list the short diagnostics you want to run. Choices are: {0}'.
                         format(' '.join(system_diagnostics)))
     parser.add_argument('-S', '--short', action='store_true', help='run all short diagnostics')
     parser.add_argument('-l', '--long-names', nargs='+',
-                        help='list the long diagnostics you want to run. Choices are: {}'.
+                        help='list the long diagnostics you want to run. Choices are: {0}'.
                         format(' '.join(long_system_diagnostics)))
     parser.add_argument('-L', '--long', action='store_true',
                         help='run all long diagnostics. These take 10s of minutes (up to an hour)'
