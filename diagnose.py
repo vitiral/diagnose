@@ -20,6 +20,7 @@ test and extend. If you have new features or find any bugs, please visit:
 
 from __future__ import print_function
 
+import time
 import re
 import subprocess
 from collections import OrderedDict
@@ -119,7 +120,7 @@ class Skip(object):
 class Diagnose(object):
     """Class to handle diagnostics from a command"""
     def __init__(self, cmd, fail_pats=None, success_pats=None, fail_on_output=False,
-                 process=None, devices=None, skip=None, requires=None, msg=''):
+                 process=None, devices=None, parallel=True, skip=None, requires=None, msg=''):
         '''
         :str cmd: the command to run to diagnose. Can have {device} in it for each device
             gotten from `devices`
@@ -137,6 +138,7 @@ class Diagnose(object):
         self.cmd = cmd
         self.devices = devices
         self.process = process
+        parallel = parallel
         self._skip = skip
         self.requires = requires
         self.fail_on_output = fail_on_output
@@ -158,36 +160,72 @@ class Diagnose(object):
         else:
             self.success_pats = None
 
+    def _find_failures(self, cmd, output):
+        matches = []
+        if self.fail_on_output and output:
+            matches.append(repr(output[:80]) + '...')
+        if self.success_pats:
+            if not match_pats(self.success_pats, output):
+                matches.append(repr(output[:80]) + '...')
+        if self.process:
+            matches.extend(self.process(output))
+        if self.fail_pats:
+            matches.extend(match_pats(self.fail_pats, output))
+        return matches
+
     def __call__(self):
         failed = []
-        for cmd, output in self._call_subprocess():
-            matches = []
-            if self.fail_on_output and output:
-                matches.append(repr(output[:80]) + '...')
-            if self.success_pats:
-                if not match_pats(self.success_pats, output):
-                    matches.append(repr(output[:80]) + '...')
-            if self.process:
-                matches.extend(self.process(output))
-            if self.fail_pats:
-                matches.extend(match_pats(self.fail_pats, output))
+        for cmd, output in self._call_subprocesses():
+            matches = self._find_failures(cmd, output)
             if matches:
-                failed.append(Failure(cmd, matches))
+                failed.extend(matches)
         return failed
 
-    def _call_subprocess(self):
+    def _get_commands(self):
         if self.devices:
-            devices = subprocess.check_output(self.devices, shell=True).split(b'\n')
-            devices = (d.strip() for d in devices)
-            devices = [decode(d) for d in devices if d]
-            commands = [self.cmd.format(device=d) for d in devices]
+            if isinstance(devices, str):
+                devices = subprocess.check_output(self.devices, shell=True).split(b'\n')
+                devices = (d.strip() for d in devices)
+                devices = [decode(d) for d in devices if d]
+            return [self.cmd.format(device=d) for d in devices]
         else:
-            commands = [self.cmd]
-        return [(cmd, subprocess.check_output(cmd, shell=True)) for cmd in commands]
+            return [self.cmd]
+
+    def _call_subprocesses(self):
+        return [(cmd, subprocess.check_output(cmd, shell=True)) for cmd in self._get_commands()]
 
     @property
     def skip(self):
         return self._skip() if self._skip else False
+
+
+class DiagnoseLong(Diagnose):
+    ''' Diagnostic tool for long running tests, including ability to run Diagnostics side by side
+        and fail if they fail. (i.e. for temperature monitoring during cpu stress test '''
+    def __init__(self, cmd, checkers=None, loop_sleep=0.5, **kwargs):
+        super(DiagnoseLong, self).__init__(cmd, **kwargs)
+        self.checkers = checkers
+        self.loop_sleep = loop_sleep
+
+    def __call__(self):
+        failures = []
+        for process in self._popen_all():
+            while process.poll() is not None:
+                for p in self.checkers:
+                    failures.extend(p())
+                if failures:
+                    process.kill()
+                    break
+                time.sleep(self.loop_sleep)
+            stdout, _ = process.communicate()
+            failures.extend(self._find_failures(stdout))
+            if failures:
+                return failures
+
+    def _popen_all(self):
+        for cmd in self._get_commands():
+            yield subprocess.Popen(
+                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 ##################################################
@@ -255,8 +293,11 @@ def process_temperatures(stdout):
     return failures
 
 
+
+
 ##################################################
 # System Diagnostics definitions
+
 
 drive_devices = "ls /dev/sd* | grep -P '^/dev/sd[a-z]+$'"
 
@@ -265,6 +306,7 @@ system_diagnostics = OrderedDict((
     ('dmesg',
         Diagnose('dmesg', msg='no concerning error logs detected',
                  fail_pats=[r'UncorrectableError',  # drive has uncorrectable error
+                            r'Hardware Error[^\n]*',
                             r'Remounting filesystem read-only',
                             r'hung_task_timeout_secs',               # kernel task hung
                             r'BUG: soft lockup',                     # kernel soft lockup
@@ -306,6 +348,28 @@ system_diagnostics = OrderedDict((
     ('memory', Diagnose('free -m', process=process_free_mem, msg='mem < 90%, swap < 25%')),
     ('sensors', Diagnose('sensors', process=process_temperatures, requires='lm_sensors',
                         skip=Skip('which sensors-detect'), msg='temps look adequate')),
+))
+
+
+cpu_checkers = [system_diagnostics['sensors'], Diagnose('dmesg', fail_pats=[r'Hardware Error[^\n]*'])]
+
+long_system_diagnostics = OrderedDict((
+    ('cpu_burn', DiagnoseLong("stress-ng --cpu '-1' --cpu-method {device} -t 60 --metrics-brief --maximize",
+                              devices=['bitops', 'callfunc', 'bitops',              # verification
+                                       'decimal64', 'decimal128',                   # decimal
+                                       'int128longdouble', 'in128decimal128',       # int
+                                       'fft', 'hanoi', 'ackermann', 'matrixprod'],  # fun
+                             requires='stress-ng', failed_pats=['unsuccessful run completed'],
+                             checkers=cpu_checkers, parallel=False)),
+    ('mem_burn', DiagnoseLong("stress-ng --tm-method {device} -t 60 --maximize",
+                              devices=['zero-one', 'galpat-0', 'galpat-1', 'swap', 'modulo-x'],
+                              requires='stress-ng', failed_pats=['unsuccessful run completed'],
+                              checkers=cpu_checkers, parallel=False)),
+    ('smart_test', DiagnoseLong('smartctl -t long {device} &&'              # start long test
+                                ' while [ "$(smartcl -a {device} |'         # wait till it's done
+                                ''' grep 'Self-test execution status.*in progress')" ];'''
+                                ' do sleep 10; done; smartctl -a {device}', devices=drive_devices,
+                                success_pats=[r'Self-test execution status:\s*\(\s*0\)'])),
 ))
 
 
