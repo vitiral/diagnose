@@ -15,3 +15,6 @@ Long term tests
         - test cpu type with `burn<cputype>`
     - `man lmsensors` to measure cpu temp
 
+
+stress-ng:
+    http://kernel.ubuntu.com/\~cking/tarballs/stress-ng/stress-ng-0.05.00.tar.gz

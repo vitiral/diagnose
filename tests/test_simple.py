@@ -1,28 +1,11 @@
 from __future__ import print_function
 
-import os
 import glob
-from contextlib import contextmanager
 import unittest
 import mock
 import diagnose as dg
 
-pjoin = os.path.join
-__path__ = os.path.split(os.path.abspath(os.path.expanduser(__file__)))[0]
-ex = pjoin(__path__, 'examples')
-
-
-@contextmanager
-def mock_dg(obj, result_path, name='mocked'):
-    def _call_subprocess():
-        with open(result_path, 'rb') as f:
-            return [(name, f.read())]
-    original = obj._call_subprocess
-    try:
-        obj._call_subprocess = _call_subprocess
-        yield
-    finally:
-        obj._call_subprocess = original
+from .utils import pjoin, ex, mock_dg, run_tests
 
 
 class SimpleTest(object):
@@ -68,14 +51,5 @@ tests = [
 ]
 
 
-def test_do():
-    print("Running tests:")
-    for test in tests:
-        print("Testing {}  ".format(test.key), end='')
-        try:
-            test()
-        except:
-            print("FAIL")
-            raise
-        else:
-            print("PASS")
+def test_():
+    run_tests(tests)
