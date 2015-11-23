@@ -249,14 +249,14 @@ class Diagnose(object):
             matches.extend(self.process(output))
         if self.fail_pats:
             matches.extend(match_pats(self.fail_pats, output))
-        return matches
+        return [Failure(cmd, m) for m in matches]
 
     def __call__(self):
         failed = []
         for cmd, output in self._call_subprocesses():
-            matches = self._find_failures(cmd, output)
-            if matches:
-                failed.extend(matches)
+            failures = self._find_failures(cmd, output)
+            if failures:
+                failed.extend(failures)
         return failed
 
     def _get_commands(self):
@@ -317,26 +317,7 @@ class DiagnoseLong(Diagnose):
 def process_current_max(stdout):
     '''bash commands that return 'current\nnext' can use this'''
     fo, max = [int(re.search('(\d+)', l).group(1)) for l in decode(stdout).split('\n') if l]
-    return ['file descriptor usage > 95%'] if fo * 1.0 / max > 0.95 else []
-
-
-def process_SMART_hdd(stdout):
-    '''smartctl processing'''
-    lines = decode(stdout).split('\n')
-    failures = []
-    name, value, raw = 'ATTRIBUTE_NAME', 'VALUE', 'RAW_VALUE'
-    expected = {
-        'Media_Wearout_Indicator': {value: Valid(min=10)},
-        'Current_Pending_Sector': {raw: Valid(max=20)},
-    }
-    header_line = next(i for (i, l) in enumerate(lines) if 'ID#' in l)
-    table = get_table(lines[header_line].split(), lines[header_line + 1:])
-    table = [r for r in table if r[name] in expected]
-    for row in table:
-        for value_name, valid in expected[row[name]].items():
-            if not valid(row[value_name]):
-                failures.append('{0} {1}'.format(row[name], row[value_name]))
-    return failures
+    return [['file descriptor usage > 95%']] if fo * 1.0 / max > 0.95 else []
 
 
 def process_free_mem(stdout):
@@ -347,11 +328,11 @@ def process_free_mem(stdout):
     header = [h.lower() for h in ['type'] + stdout[0].split()[:3]]
     mem = get_table(header, [stdout[1]])[0]
     if mem['used'] * 1.0 / mem['total'] > 0.90:
-        failures.append('mem usage > 90%')
+        failures.append(['mem usage > 90%'])
     if len(stdout) > 2:  # swap exists
         swap = get_table(header, [stdout[2]])[0]
         if swap['total'] and swap['used'] * 1.0 / swap['total'] > 0.25:
-            failures.append('swap usage > 25%')
+            failures.append(['swap usage > 25%'])
     return failures
 
 
@@ -372,7 +353,7 @@ def process_temperatures(stdout):
         high = list(filter(None, (linfo.get('high'), linfo.get('crit', 10) - 10)))
         high = min(high) if high else 95
         if temp > high:
-            failures.append(line)
+            failures.append([line])
     return failures
 
 
@@ -403,7 +384,7 @@ system_diagnostics = OrderedDict((
                            process=process_current_max, requires='lsof',
                            msg='file descriptors < 95% usage')),
     ('threads', Diagnose("ps -eo nlwp | tail -n +2 | awk '{ num_threads += $1 }"
-                         " END { print num_threads }' && ulimit -u",
+                         " END { print num_threads }' && bash -c 'ulimit -u'",
                          process=process_current_max, msg='threads < 95% usage')),
 
     # HDD / disk
@@ -414,9 +395,11 @@ system_diagnostics = OrderedDict((
                             r'(Checksum: (?!correct))'],
                  msg='hardrives unlocked', skip=Skip('which hdparm'))),
     ('df', Diagnose('df', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='disk usage < 95%')),
+
     ('df_inode', Diagnose('df -i', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='inodes < 95%')),
-    ('smart', Diagnose('smartctl -a {device}', devices=drive_devices, process=process_SMART_hdd,
-                      pass_pats=[r'Self-test execution status:\s*\(\s*0\)'],
+    ('smart', Diagnose('smartctl -a {device}', devices=drive_devices,
+                      fail_pats=[r'(overall-health[^\n]*test result: (?!PASSED)[^\n]*)'],
+                      pass_pats=[r'(Self-test execution status:\s*\(\s*0\s*\))'],
                       skip=Skip('which smartctl'), requires='smartmontools',
                       msg='drives in usable health')),
 
@@ -427,7 +410,7 @@ system_diagnostics = OrderedDict((
                           msg='connected to google DNS')),
 
     # Misc Hardware
-    ('memory', Diagnose('free -m', process=process_free_mem, msg='mem < 90%, swap < 25%')),
+    ('memory', Diagnose('free -m | grep "total\s*used\|Mem:\|Swap:"', process=process_free_mem, msg='mem < 90%, swap < 25%')),
     ('sensors', Diagnose('sensors', process=process_temperatures, requires='lm_sensors',
                         skip=Skip('which sensors-detect'), msg='temps look adequate')),
 ))
@@ -452,12 +435,24 @@ long_system_diagnostics = OrderedDict((
                               devices=['zero-one', 'galpat-0', 'galpat-1', 'swap', 'modulo-x'],
                               requires='stress-ng', fail_pats=['unsuccessful run completed'],
                               checkers=cpu_checkers, parallel=False)),
-    ('smart_test', DiagnoseLong('smartctl -t long {device} &&'              # start long test
+    ('smart_test', DiagnoseLong('smartctl -t long {device} &&'               # start long test
                                 ' while [ "$(smartctl -a {device} |'         # wait till it's done
                                 ''' grep 'Self-test execution status.*in progress')" ];'''
                                 ' do sleep 10; done; smartctl -a {device}', devices=drive_devices,
+                                fail_pats=system_diagnostics['smart'].fail_pats_raw,
                                 pass_pats=system_diagnostics['smart'].pass_pats_raw)),
 ))
+
+
+def remove_skipped(diagnostics):
+    new_diagnostics = []
+    for name, diagnose in diagnostics.items():
+        if diagnose.skip:
+            requires = ': requires ' + diagnose.requires if diagnose.requires else ''
+            print("SKIP {0}{1}".format(name, requires))
+            continue
+        new_diagnostics.append((name, diagnose))
+    return OrderedDict(new_diagnostics)
 
 
 def start_parallel_diagnostics(diagnostics):
@@ -472,14 +467,7 @@ def start_parallel_diagnostics(diagnostics):
 
 
 def run_sequential_diagnostics(diagnostics):
-    results = []
-    for name, diagnose in diagnostics.items():
-        if diagnose.skip:
-            requires = ': requires ' + diagnose.requires if diagnose.requires else ''
-            print("SKIP {0}{1}".format(name, requires))
-            continue
-        results.append(diagnose())
-    return results
+    return [d() for d in diagnostics.values()]
 
 
 def print_results(diagnostics, results):
@@ -514,6 +502,7 @@ def main():
         short_tests = args.short_names
     if short_tests:
         diagnostics = get_keys(system_diagnostics, *short_tests)
+        diagnostics = remove_skipped(diagnostics)
         if args.sequential:
             results = run_sequential_diagnostics(diagnostics)
         else:
