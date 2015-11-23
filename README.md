@@ -8,13 +8,13 @@ sudo ./diagnose
 
 # Future development
 
-Long term tests
-- cpu+memory burn and temperature monitoring
-    - `less /usr/share/doc/cpuburn/README`
-        - test memory with `burnMMX`
-        - test cpu type with `burn<cputype>`
-    - `man lmsensors` to measure cpu temp
+**diagnose** is now in Beta and is ready for use. However, several of the tests could use expert review and
+contribution. In addition, more tests are always welcome. If you have an idea for a test, please open an
+issue and I will try to get it included.
 
+For inclusion a test must have these characteristics:
+- be relatively easy to implement with simple bash commands (can require a dependency)
+- have output that can be analyzed for failure through regexp commands OR a few lines of python
 
-stress-ng:
-    http://kernel.ubuntu.com/\~cking/tarballs/stress-ng/stress-ng-0.05.00.tar.gz
+Primarily, I am NOT interested in writing custom diagnostic tools -- this script is intended to **consolodate**
+tools, not create them.
