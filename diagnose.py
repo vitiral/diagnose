@@ -99,6 +99,7 @@ def get_table(header, lines, separator=None):
 # Classes
 
 class Thread(threading.Thread):
+    '''better thread with output and exception raising on join'''
     def __init__(self, *args, **kwargs):
         super(Thread, self).__init__(*args, **kwargs)
         self.output = None
@@ -169,7 +170,7 @@ class Skip(object):
         self.cmd = cmd
 
         def default_process(text):
-            return not re.search(r'^/.*{0}$'.format(cmd.split()[1]), decode(text))
+            return not re.search(r'^/[/\w]+/{0}$'.format(cmd.split()[0]), decode(text))
         self.process = process or default_process
 
     def __call__(self):
@@ -399,7 +400,7 @@ system_diagnostics = OrderedDict((
         Diagnose('hdparm -I {device}', devices=drive_devices,
                  fail_pats=[r'Security:.*((?<!not)\slocked)',
                             r'(Checksum: (?!correct))'],
-                 msg='hardrives unlocked')),
+                 msg='hardrives unlocked', skip=Skip('which hdparm'))),
     ('df', Diagnose('df', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='disk usage < 95%')),
     ('df_inode', Diagnose('df -i', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='inodes < 95%')),
     ('smart', Diagnose('smartctl -a {device}', devices=drive_devices, process=process_SMART_hdd,
@@ -408,7 +409,8 @@ system_diagnostics = OrderedDict((
                       msg='drives in usable health')),
 
     # Network
-    ('iplink', Diagnose('ip link', fail_pats=['^\d+:.*state DOWN.*$'], msg='network links up')),
+    ('iplink', Diagnose('ip link', fail_pats=['^\d+:.*state DOWN.*$'], msg='network links up',
+                        skip=Skip('which ip'))),
     ('internet', Diagnose('ping -c 1 8.8.8.8', fail_pats=[r'0 received, 100% packet loss'],
                           msg='connected to google DNS')),
 
