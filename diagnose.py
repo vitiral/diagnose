@@ -31,7 +31,7 @@ import logging
 
 __version__ = '0.0.1'
 
-logging.basicConfig()
+logging.basicConfig(level=logging.DEBUG)
 _log = logging.getLogger('diagnose')
 
 
@@ -136,7 +136,7 @@ class Failure(object):
 
     def __repr__(self):
         header = 'FAIL [{}]:\n'.format(self.cmd)
-        lines = ['  {}'.format(l) for l in self.failures]
+        lines = [' :: {}'.format(l) for l in self.failures]
         return header + '\n'.join(lines)
 
 
@@ -183,7 +183,7 @@ class Diagnose(object):
         self.cmd = cmd
         self.devices = devices
         self.process = process
-        parallel = parallel
+        self.parallel = parallel
         self._skip = skip
         self.requires = requires
         self.fail_on_output = fail_on_output
@@ -259,6 +259,7 @@ class DiagnoseLong(Diagnose):
     def __call__(self):
         failures = []
         for cmd, process in self._popen_all():
+            _log.debug("Starting long test: " + cmd)
             while process.poll() is None:
                 for p in self.checkers:
                     failures.extend(p())
@@ -337,8 +338,8 @@ def process_temperatures(stdout):
         temp = linfo.get('temp')
         if not temp:
             continue
-        high = list(filter(None, (linfo.get('high'), linfo.get('crit'))))
-        high = min(high) if high else 105
+        high = list(filter(None, (linfo.get('high'), linfo.get('crit', 10) - 10)))
+        high = min(high) if high else 95
         if temp > high:
             failures.append(line)
     return failures
@@ -379,7 +380,6 @@ system_diagnostics = OrderedDict((
     ('hdparm',
         Diagnose('hdparm -I {device}', devices=drive_devices,
                  fail_pats=[r'Security:.*((?<!not)\slocked)',
-                            r'Security:.*((?<!not)\sfrozen)',
                             r'(Checksum: (?!correct))'],
                  msg='hardrives unlocked')),
     ('df', Diagnose('df', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='disk usage < 95%')),
@@ -409,15 +409,14 @@ cpu_checkers = [system_diagnostics['sensors'],
 
 long_system_diagnostics = OrderedDict((
     ('cpu_burn', DiagnoseLong("stress-ng --cpu '-1' --cpu-method {device} -t 60"
-                              " --metrics-brief --maximize --aggressive",
+                              " --metrics-brief --maximize",
                               devices=['bitops', 'callfunc',                        # verification
                                        'decimal64', 'decimal128',                   # decimal
                                        'int128longdouble', 'in128decimal128',       # int
                                        'fft', 'hanoi', 'ackermann', 'matrixprod'],  # diverse
                              requires='stress-ng', fail_pats=['unsuccessful run completed'],
                              checkers=cpu_checkers, parallel=False)),
-    ('mem_burn', DiagnoseLong("sudo ./stress-ng --vm '-1' --vm-method {device}"
-                              " -t 60 --maximize --aggressive",
+    ('mem_burn', DiagnoseLong("swapoff -a && stress-ng --vm '-1' --vm-method {device} -t 60 --maximize ; swapon -a",
                               devices=['zero-one', 'galpat-0', 'galpat-1', 'swap', 'modulo-x'],
                               requires='stress-ng', fail_pats=['unsuccessful run completed'],
                               checkers=cpu_checkers, parallel=False)),
@@ -496,6 +495,7 @@ def main():
     elif args.long_names:
         long_tests = args.long_names
     if long_tests:
+        print("# Running long tests, this could take a while...")
         diagnostics = get_keys(long_system_diagnostics, *long_tests)
         parallel, sequential = OrderedDict(), OrderedDict()
         for k, d in diagnostics.items():
@@ -503,12 +503,16 @@ def main():
                 parallel[k] = d
             else:
                 sequential[k] = d
-        parallel_threads = start_parallel_diagnostics(parallel)
+        if not args.sequential:
+            parallel_threads = start_parallel_diagnostics(parallel)
 
         sequential_results = run_sequential_diagnostics(sequential)
         print_results(sequential, sequential_results)
 
-        parallel_results = [t.join() for t in parallel_threads]
+        if args.sequential:  # cmd line override
+            parallel_results = run_sequential_diagnostics(parallel)
+        else:
+            parallel_results = [t.join() for t in parallel_threads]
         print_results(parallel, parallel_results)
 
 
