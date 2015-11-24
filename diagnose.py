@@ -195,7 +195,7 @@ class Skip(object):
 
 class Diagnose(object):
     """Class to handle diagnostics from a command"""
-    def __init__(self, cmd, fail_pats=None, pass_pats=None, fail_on_output=False,
+    def __init__(self, cmd, skip_pats=None, fail_pats=None, pass_pats=None, fail_on_output=False,
                  process=None, devices=None, parallel=True, skip=None, requires=None, msg=''):
         '''
         :str cmd: the command to run to diagnose. Can have {device} in it for each device
@@ -219,6 +219,7 @@ class Diagnose(object):
         self.requires = requires
         self.fail_on_output = fail_on_output
         self.msg = msg
+        self.skip_pats_raw = skip_pats
         self.fail_pats_raw = fail_pats
         self.pass_pats_raw = pass_pats
 
@@ -228,23 +229,20 @@ class Diagnose(object):
             pat = pat.encode()
             return pat
 
-        if fail_pats:
-            self.fail_pats = [re.compile(format_pat(f), re.S + re.M) for f in fail_pats]
-        else:
-            self.fail_pats = None
-
-        if pass_pats:
-            self.pass_pats = [re.compile(format_pat(f), re.S) for f in pass_pats]
-        else:
-            self.pass_pats = None
+        self.skip_pats = [re.compile(format_pat(f), re.S) for f in skip_pats] if skip_pats else None
+        self.fail_pats = [re.compile(format_pat(f), re.S + re.M) for f in fail_pats] if fail_pats else None
+        self.pass_pats = [re.compile(format_pat(f), re.S) for f in pass_pats] if pass_pats else None
 
     def _find_failures(self, cmd, output):
         matches = []
         if self.fail_on_output and output:
-            matches.append(repr(output[:80]) + '...')
+            matches.append([repr(output[:80]) + '...'])
+        if self.skip_pats:
+            if match_pats(self.skip_pats, output):
+                return []
         if self.pass_pats:
             if not match_pats(self.pass_pats, output):
-                matches.append(repr(output[:80]) + '...')
+                matches.append([repr(output[:80]) + '...'])
         if self.process:
             matches.extend(self.process(output))
         if self.fail_pats:
@@ -272,7 +270,7 @@ class Diagnose(object):
             return [self.cmd]
 
     def _call_subprocesses(self):
-        return [(cmd, call_cmd(cmd)[0]) for cmd in self._get_commands()]
+        return [(cmd, call_cmd(cmd, raise_on_error=False)[0]) for cmd in self._get_commands()]
 
     @property
     def skip(self):
@@ -398,6 +396,7 @@ system_diagnostics = OrderedDict((
 
     ('df_inode', Diagnose('df -i', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='inodes < 95%')),
     ('smart', Diagnose('smartctl -a {device}', devices=drive_devices,
+                      skip_pats=[r'Device does not support Self Test logging'],
                       fail_pats=[r'(overall-health[^\n]*test result: (?!PASSED)[^\n]*)'],
                       pass_pats=[r'(Self-test execution status:\s*\(\s*0\s*\))'],
                       skip=Skip('which smartctl'), requires='smartmontools',
