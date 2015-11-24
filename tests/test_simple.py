@@ -44,6 +44,7 @@ tests = [
     # network
     SimpleTest('iplink'),
     SimpleTest('internet'),
+    SimpleTest('website'),
     # misc hardware
     SimpleTest('memory'),
     SimpleTest('sensors'),

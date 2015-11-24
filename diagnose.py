@@ -312,10 +312,15 @@ class DiagnoseLong(Diagnose):
 ##################################################
 # Special parsing functions
 
-def process_current_max(stdout):
+class ProcessCurrentMax(object):
     '''bash commands that return 'current\nnext' can use this'''
-    fo, max = [int(re.search('(\d+)', l).group(1)) for l in decode(stdout).split('\n') if l]
-    return [['file descriptor usage > 95%']] if fo * 1.0 / max > 0.95 else []
+    def __init__(self, name, max):
+        self.name = name
+        self.max = max
+
+    def __call__(self, stdout):
+        fo, max = [int(re.search('(\d+)', l).group(1)) for l in decode(stdout).split('\n') if l]
+        return [['{} > {}%'.format(self.name, int(self.max * 100))]] if fo * 1.0 / max > self.max else []
 
 
 def process_free_mem(stdout):
@@ -379,11 +384,11 @@ system_diagnostics = OrderedDict((
     ('systemctl', Diagnose('systemctl --failed', skip=Skip('which systemctl'),
                            fail_pats=[r'\sfailed\s'], msg='no failed services')),
     ('file_desc', Diagnose('lsof | wc -l && sysctl fs.file-max', skip=Skip('which lsof'),
-                           process=process_current_max, requires='lsof',
-                           msg='file descriptors < 95% usage')),
+                           process=ProcessCurrentMax('file_desc', 0.7), requires='lsof',
+                           msg='file descriptors < 70% usage')),
     ('threads', Diagnose("ps -eo nlwp | tail -n +2 | awk '{ num_threads += $1 }"
                          " END { print num_threads }' && bash -c 'ulimit -u'",
-                         process=process_current_max, msg='threads < 95% usage')),
+                         process=ProcessCurrentMax('threads', 0.7), msg='threads < 70% usage')),
 
     # HDD / disk
     ('readonly', Diagnose('ls -ld /', pass_pats=[r'^drwx'], msg='/ is read+write+exec by root')),
@@ -394,7 +399,7 @@ system_diagnostics = OrderedDict((
                  msg='hardrives unlocked', skip=Skip('which hdparm'))),
     ('df', Diagnose('df', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='disk usage < 95%')),
 
-    ('df_inode', Diagnose('df -i', fail_pats=[r'((?:9[5-9]|100)%.*$)'], msg='inodes < 95%')),
+    ('df_inode', Diagnose('df -i', fail_pats=[r'((?:[7-9]\d|100)%.*$)'], msg='inodes < 70%')),
     ('smart', Diagnose('smartctl -a {device}', devices=drive_devices,
                       skip_pats=[r'Device does not support Self Test logging'],
                       fail_pats=[r'(overall-health[^\n]*test result: (?!PASSED)[^\n]*)'],
@@ -407,6 +412,8 @@ system_diagnostics = OrderedDict((
                         skip=Skip('which ip'))),
     ('internet', Diagnose('ping -c 1 8.8.8.8', fail_pats=[r'0 received, 100% packet loss'],
                           msg='connected to google DNS')),
+    ('website', Diagnose('ping -c 1 google.com', fail_pats=[r'0 received, 100% packet loss'],
+                          msg='connected to google website')),
 
     # Misc Hardware
     ('memory', Diagnose('free -m | grep "total\s*used\|Mem:\|Swap:"', process=process_free_mem, msg='mem < 90%, swap < 25%')),

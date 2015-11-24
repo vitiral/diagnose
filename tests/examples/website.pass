@@ -1,0 +1,6 @@
+PING www.google.com (74.125.225.17) 56(84) bytes of data.
+64 bytes from ord08s12-in-f17.1e100.net (74.125.225.17): icmp_seq=1 ttl=54 time=56.3 ms
+
+--- www.google.com ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 56.305/56.305/56.305/0.000 ms
